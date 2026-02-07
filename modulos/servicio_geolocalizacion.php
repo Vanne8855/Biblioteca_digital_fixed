@@ -5,10 +5,9 @@ require_once '../config/config.php';
 $db = new Conexion($opciones);
 $pdo = $db->con;
 
-// Obtener todas las ventas con ubicaciones (LEFT JOIN para incluir todas las ventas)
 $stmt = $pdo->query("
-    SELECT V.id_venta, V.direccion_envio, V.ciudad, V.estado, V.latitud, V.longitud, 
-           V.estado_venta, V.fecha_venta, C.nombre as cliente, L.titulo
+    SELECT V.id_venta, V.direccion_envio, V.ciudad, V.latitud, V.longitud,
+           V.estado_venta, V.fecha_venta, C.nombre AS cliente, L.titulo
     FROM Ventas V
     LEFT JOIN Clientes C ON V.id_cliente = C.id_cliente
     LEFT JOIN Libros L ON V.id_libro = L.id_libro
@@ -16,9 +15,9 @@ $stmt = $pdo->query("
     ORDER BY V.fecha_venta DESC
     LIMIT 50
 ");
+
 $ubicaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Preparar datos para el mapa
 $markers = [];
 foreach($ubicaciones as $ubi) {
     $markers[] = [
@@ -99,8 +98,7 @@ foreach($ubicaciones as $ubi) {
             border-radius: 50%;
         }
     </style>
-    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY"></script>
-</head>
+    </head>
 <body>
     <nav class="navbar navbar-light mb-4">
         <div class="container">
@@ -158,113 +156,70 @@ foreach($ubicaciones as $ubi) {
         </div>
 
         <div class="map-container">
-            <h4 class="mb-3">🗺️ Mapa de Entregas</h4>
+            <h4 class="mb-3">Mapa de Entregas</h4>
+            <div class="mb-3">
+                <label class="form-label"><strong>Seleccionar pedido</strong></label>
+                <select class="form-select" onchange="mostrarInfo(this.value)">
+                    <?php foreach ($markers as $i => $m): ?>
+                        <option value="<?= $i ?>">
+                            Pedido #<?= $m['pedido'] ?> – <?= $m['ciudad'] ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
             <div id="map"></div>
+
+            <div class="mt-3 p-3 bg-light rounded" id="infoPedido">
             
-            <div class="legend">
-                <h6 class="mb-3"><strong>Leyenda de Estados</strong></h6>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ffc107;"></div>
-                    <span>Pendiente</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #0dcaf0;"></div>
-                    <span>Procesando</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #0d6efd;"></div>
-                    <span>Enviado</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #198754;"></div>
-                    <span>Entregado</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #dc3545;"></div>
-                    <span>Cancelado</span>
-                </div>
             </div>
         </div>
-    </div>
 
     <footer class="text-center text-muted mt-5 pb-4">
         <small>Biblioteca Digital © <?php echo date('Y'); ?></small>
     </footer>
 
-    <script>
-        const markersData = <?php echo json_encode($markers); ?>;
-        
-        function initMap() {
-            // Centro del mapa (México)
-            const center = { lat: 23.6345, lng: -102.5528 };
-            
-            const map = new google.maps.Map(document.getElementById('map'), {
-                zoom: 5,
-                center: center,
-                mapTypeControl: true,
-                streetViewControl: false,
-                fullscreenControl: true
-            });
-            
+<script>
+    const markersData = <?php echo json_encode($markers); ?>;
 
-            const colorMap = {
-                'pendiente': '#ffc107',
-                'procesando': '#0dcaf0',
-                'enviado': '#0d6efd',
-                'entregado': '#198754',
-                'cancelado': '#dc3545'
-            };
-            
-            markersData.forEach(function(markerData) {
-                const color = colorMap[markerData.estado_venta] || '#666';
-                
-                const marker = new google.maps.Marker({
-                    position: { lat: markerData.lat, lng: markerData.lng },
-                    map: map,
-                    title: markerData.title,
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 10,
-                        fillColor: color,
-                        fillOpacity: 0.8,
-                        strokeColor: '#fff',
-                        strokeWeight: 2
-                    }
-                });
-                
-                const infoWindow = new google.maps.InfoWindow({
-                    content: `
-                        <div style="padding: 10px; min-width: 200px;">
-                            <h6 style="margin: 0 0 10px 0; color: #333;">
-                                <strong>${markerData.title}</strong>
-                            </h6>
-                            <p style="margin: 5px 0; font-size: 14px;">
-                                <strong>Pedido:</strong> #${markerData.pedido}<br>
-                                <strong>Cliente:</strong> ${markerData.cliente}<br>
-                                <strong>Dirección:</strong> ${markerData.direccion}<br>
-                                <strong>Ciudad:</strong> ${markerData.ciudad}<br>
-                                <strong>Estado:</strong> <span style="color: ${color}; font-weight: bold;">${markerData.estado_venta.toUpperCase()}</span>
-                            </p>
-                        </div>
-                    `
-                });
-                
-                marker.addListener('click', function() {
-                    infoWindow.open(map, marker);
-                });
-            });
- 
-            if(markersData.length > 0) {
-                const bounds = new google.maps.LatLngBounds();
-                markersData.forEach(function(marker) {
-                    bounds.extend(new google.maps.LatLng(marker.lat, marker.lng));
-                });
-                map.fitBounds(bounds);
-            }
+    function cargarMapa(lat, lng) {
+        document.getElementById("map").innerHTML = `
+            <iframe
+                width="100%"
+                height="600"
+                style="border:0; border-radius:12px"
+                loading="lazy"
+                allowfullscreen
+                src="https://www.google.com/maps?q=${lat},${lng}&z=15&output=embed">
+            </iframe>
+        `;
+    }
+
+    function mostrarInfo(index) {
+        const p = markersData[index];
+
+        cargarMapa(p.lat, p.lng);
+
+        document.getElementById("infoPedido").innerHTML = `
+            <h6><strong>Información del Pedido</strong></h6>
+            <p class="mb-1"><strong>Pedido:</strong> #${p.pedido}</p>
+            <p class="mb-1"><strong>Cliente:</strong> ${p.cliente}</p>
+            <p class="mb-1"><strong>Dirección:</strong> ${p.direccion}</p>
+            <p class="mb-1"><strong>Ciudad:</strong> ${p.ciudad}</p>
+            <p class="mb-0">
+                <strong>Estado:</strong>
+                <span class="badge bg-secondary">${p.estado_venta.toUpperCase()}</span>
+            </p>
+        `;
+    }
+
+    window.onload = () => {
+        if (markersData.length > 0) {
+            mostrarInfo(0);
         }
-        
+    };
+</script>
 
-        window.onload = initMap;
-    </script>
-</body>
+
+    </body>
 </html>

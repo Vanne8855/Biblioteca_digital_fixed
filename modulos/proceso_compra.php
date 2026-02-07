@@ -259,8 +259,18 @@ if($libro['cantidad_disponible'] <= 0) {
                             <div id="map"></div>
                         </div>
                         
-                        <input type="hidden" id="latitud" name="latitud">
-                        <input type="hidden" id="longitud" name="longitud">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Latitud (GPS)</label>
+                                <input type="text" id="latitud" name="latitud" class="form-control" readonly placeholder="Se llenará automáticamente">
+                                <small class="text-muted">Coordenada automática del mapa</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Longitud (GPS)</label>
+                                <input type="text" id="longitud" name="longitud" class="form-control" readonly placeholder="Se llenará automáticamente">
+                                <small class="text-muted">Coordenada automática del mapa</small>
+                            </div>
+                        </div>
                         
                         <div class="d-flex gap-2">
                             <button type="button" class="btn btn-secondary" onclick="siguientePaso(1)">
@@ -418,31 +428,120 @@ if($libro['cantidad_disponible'] <= 0) {
         document.getElementById('formCompra').addEventListener('submit', function(e) {
             e.preventDefault();
             
+            console.log('=== INICIO SUBMIT FORMULARIO ===');
+            
             const btnFinalizar = document.getElementById('btnFinalizar');
             btnFinalizar.disabled = true;
             btnFinalizar.textContent = 'Procesando...';
             
             const formData = new FormData(this);
             
+            // LOG: Ver todos los datos que se envían
+            console.log('Datos del formulario:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`  ${key}: ${value}`);
+            }
+            
+            // Validación ANTES de enviar
+            const validaciones = [
+                { campo: 'id_libro', valor: formData.get('id_libro') },
+                { campo: 'id_cliente', valor: formData.get('id_cliente') },
+                { campo: 'cantidad', valor: formData.get('cantidad') },
+                { campo: 'direccion', valor: formData.get('direccion') },
+                { campo: 'ciudad', valor: formData.get('ciudad') },
+                { campo: 'estado', valor: formData.get('estado') },
+                { campo: 'codigo_postal', valor: formData.get('codigo_postal') },
+                { campo: 'latitud', valor: formData.get('latitud') },
+                { campo: 'longitud', valor: formData.get('longitud') },
+                { campo: 'metodo_pago', valor: formData.get('metodo_pago') }
+            ];
+            
+            console.log('\n=== VALIDACIÓN DE CAMPOS ===');
+            let hayErrores = false;
+            let erroresEncontrados = [];
+            
+            validaciones.forEach(v => {
+                if (!v.valor || v.valor === '' || v.valor === '0' || v.valor === 'null') {
+                    console.error(`❌ FALTA: ${v.campo} = "${v.valor}"`);
+                    erroresEncontrados.push(v.campo);
+                    hayErrores = true;
+                } else {
+                    console.log(`✓ ${v.campo} = "${v.valor}"`);
+                }
+            });
+            
+            if (hayErrores) {
+                alert('ERROR: Faltan campos obligatorios:\n\n' + erroresEncontrados.join('\n') + '\n\nRevisa la consola (F12) para más detalles');
+                btnFinalizar.disabled = false;
+                btnFinalizar.textContent = '✓ Finalizar Compra';
+                console.error('=== SUBMIT CANCELADO POR VALIDACIÓN ===');
+                return;
+            }
+            
+            console.log('✓ Todas las validaciones pasaron');
+            console.log('\n=== ENVIANDO PETICIÓN ===');
+            
             fetch('procesar_compra.php', {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Respuesta recibida:', response);
+                console.log('Status:', response.status);
+                console.log('Status Text:', response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                // Intentar parsear como JSON
+                return response.text().then(text => {
+                    console.log('Texto de respuesta:', text);
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('❌ ERROR: La respuesta NO es JSON válido');
+                        console.error('Respuesta recibida:', text);
+                        throw new Error('El servidor no devolvió JSON. Revisa la consola para ver la respuesta completa.');
+                    }
+                });
+            })
             .then(data => {
+                console.log('Datos parseados:', data);
+                
                 if(data.success) {
+                    console.log('✓ COMPRA EXITOSA - ID Venta:', data.id_venta);
+                    alert('¡Compra realizada con éxito!\nID de venta: ' + data.id_venta);
                     window.location.href = 'confirmacion.php?id=' + data.id_venta;
                 } else {
-                    alert('Error: ' + data.error);
+                    console.error('❌ ERROR del servidor:', data.error);
+                    
+                    // Mostrar error detallado
+                    let mensajeError = 'ERROR:\n' + data.error;
+                    
+                    if (data.debug) {
+                        mensajeError += '\n\nDetalles técnicos:';
+                        mensajeError += '\nArchivo: ' + data.debug.file;
+                        mensajeError += '\nLínea: ' + data.debug.line;
+                    }
+                    
+                    alert(mensajeError);
+                    
                     btnFinalizar.disabled = false;
                     btnFinalizar.textContent = '✓ Finalizar Compra';
                 }
             })
             .catch(error => {
-                alert('Error al procesar la compra');
+                console.error('❌ ERROR DE RED O PARSEO:', error);
+                console.error('Detalles completos:', error);
+                
+                alert('Error al procesar la compra:\n\n' + error.message + '\n\nAbre la consola (F12) para ver más detalles.');
+                
                 btnFinalizar.disabled = false;
                 btnFinalizar.textContent = '✓ Finalizar Compra';
             });
+            
+            console.log('=== FIN SUBMIT FORMULARIO ===\n');
         });
     </script>
 </body>
